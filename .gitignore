@@ -1,18 +1,29 @@
+# Secrets
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
+
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
-.env
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-tmp/
 
 # Node
 node_modules/
 dist/
 build/
+
+# Runtime uploads
+tmp/
+backend/tmp/
+**/tmp/uploads/
+*.log
 
 # OS / editors
 .DS_Store
