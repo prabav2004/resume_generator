@@ -76,59 +76,46 @@ export default function PdfPreview({ file, previewUrl, isOpen, onClose, darkMode
     setZoom(zoomLevels[nextIndex]);
   };
 
+  const toolBtnClass = darkMode
+    ? 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-slate-200 transition hover:bg-white/10'
+    : 'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 12 }}
-      className={`rounded-[24px] border p-4 shadow-[0_18px_60px_rgba(15,23,42,0.2)] backdrop-blur-xl ${darkMode ? 'border-white/10 bg-slate-950/70' : 'border-slate-200 bg-white/90'}`}
+      className={`min-w-0 rounded-3xl border p-4 shadow-[0_18px_60px_rgba(15,23,42,0.2)] backdrop-blur-xl sm:p-5 ${darkMode ? 'border-white/10 bg-slate-950/70' : 'border-slate-200 bg-white/90'}`}
     >
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className={`text-[10px] font-semibold uppercase tracking-[0.24em] ${darkMode ? 'text-slate-500' : 'text-slate-500'}`}>Resume preview</p>
-          <p className={`text-sm ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>Zoom, scroll, fullscreen, and download your uploaded PDF</p>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Resume preview</p>
+          <p className={`truncate text-sm ${darkMode ? 'text-slate-300' : 'text-slate-700'}`}>
+            Zoom, scroll, fullscreen, and download your uploaded PDF
+          </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={() => changeZoom('out')}
-            className={`rounded-xl border p-2 transition ${darkMode ? 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
-            aria-label="Zoom out"
-          >
+          <button type="button" onClick={() => changeZoom('out')} className={toolBtnClass} aria-label="Zoom out">
             <ZoomOut className="h-4 w-4" />
           </button>
           <button
+            type="button"
             onClick={() => changeZoom('reset')}
-            className={`rounded-xl border px-3 py-2 text-sm font-medium transition ${darkMode ? 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
+            className={`${toolBtnClass} w-auto px-3 text-sm font-medium`}
           >
             {zoom.toFixed(2)}x
           </button>
-          <button
-            onClick={() => changeZoom('in')}
-            className={`rounded-xl border p-2 transition ${darkMode ? 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
-            aria-label="Zoom in"
-          >
+          <button type="button" onClick={() => changeZoom('in')} className={toolBtnClass} aria-label="Zoom in">
             <ZoomIn className="h-4 w-4" />
           </button>
-          <button
-            onClick={toggleFullscreen}
-            className={`rounded-xl border p-2 transition ${darkMode ? 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
-            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-          >
+          <button type="button" onClick={toggleFullscreen} className={toolBtnClass} aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </button>
-          <button
-            onClick={handleDownload}
-            className={`rounded-xl border p-2 transition ${darkMode ? 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
-            aria-label="Download PDF"
-          >
+          <button type="button" onClick={handleDownload} className={toolBtnClass} aria-label="Download PDF">
             <Download className="h-4 w-4" />
           </button>
-          <button
-            onClick={onClose}
-            className={`rounded-xl border p-2 transition ${darkMode ? 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10' : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'}`}
-            aria-label="Close preview"
-          >
+          <button type="button" onClick={onClose} className={toolBtnClass} aria-label="Close preview">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -136,15 +123,15 @@ export default function PdfPreview({ file, previewUrl, isOpen, onClose, darkMode
 
       <div
         ref={viewerRef}
-        className="relative h-[70vh] min-h-[480px] overflow-auto rounded-[20px] border border-white/10 bg-slate-950/50 p-2 sm:p-4"
+        className={`relative max-h-[70vh] min-h-[280px] overflow-auto rounded-2xl border p-2 sm:min-h-[360px] sm:p-3 ${darkMode ? 'border-white/10 bg-slate-950/50' : 'border-slate-200 bg-slate-100'}`}
       >
         <div
-          className="mx-auto w-full max-w-4xl origin-top"
+          className="mx-auto w-full max-w-3xl origin-top"
           style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', width: `${100 / zoom}%` }}
         >
           <iframe
             src={`${previewUrl}#toolbar=0&navpanes=0&scrollbar=1`}
-            className="min-h-[960px] w-full rounded-[16px] border-none bg-white"
+            className="aspect-[8.5/11] min-h-[480px] w-full rounded-xl border-none bg-white sm:min-h-[640px]"
             title="Resume PDF preview"
           />
         </div>
