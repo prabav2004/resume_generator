@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     frontend_url: AnyHttpUrl | None = None
     temp_upload_dir: Path = PROJECT_ROOT / "tmp" / "uploads"
     max_resume_upload_bytes: int = 10 * 1024 * 1024
+    database_url: str = Field(
+        default="postgresql+psycopg://postgres:postgres@localhost:5432/resume_generator",
+        validation_alias="DATABASE_URL",
+    )
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
@@ -51,6 +55,15 @@ class Settings(BaseSettings):
     def parse_cors_origins(cls, value: str | list[str]) -> list[str]:
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+psycopg://", 1)
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
 
     @field_validator(

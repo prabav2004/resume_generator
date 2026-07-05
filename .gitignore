@@ -30,3 +30,7 @@ backend/tmp/
 Thumbs.db
 .vscode/
 .idea/
+
+*.db
+*.sqlite
+*.sqlite3
