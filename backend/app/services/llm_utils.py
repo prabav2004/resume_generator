@@ -90,7 +90,11 @@ def is_rate_limit_error(exc: BaseException) -> bool:
 
 def is_schema_error(exc: BaseException) -> bool:
     text = str(exc).lower()
-    return "structured" in text or "schema" in text or "validation" in text or "does not match" in text
+    return any(marker in text for marker in (
+        "structured", "schema", "validation", "does not match",
+        "json_validate_failed", "expected object", "invalid json",
+        "failed_generation", "invalid_request_error",
+    ))
 
 
 def retry_after_seconds(exc: BaseException, fallback: float = 15.0) -> float:

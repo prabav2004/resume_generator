@@ -1,7 +1,4 @@
 import logging
-import time
-
-from langchain_core.messages import HumanMessage
 from langchain_openai import ChatOpenAI
 
 from app.config.config import get_settings
@@ -11,9 +8,9 @@ from app.services.llm_utils import (
     RequestDeduplicator,
     is_rate_limit_error,
     is_schema_error,
-    retry_after_seconds,
     stable_request_key,
 )
+from app.services.structured_llm_helper import invoke_structured_with_json_recovery
 from app.utils.exceptions import AppError
 
 logger = logging.getLogger(__name__)
@@ -82,8 +79,6 @@ class LearningRoadmapService:
                 return self._invoke_provider(provider, messages, analysis_id)
             except AppError as exc:
                 provider_errors[provider] = exc
-                if exc.code == "llm_rate_limited" and provider == "groq":
-                    raise
                 logger.warning(
                     "analysis_id=%s stage=roadmap provider=%s failed code=%s",
                     analysis_id,
@@ -100,17 +95,23 @@ class LearningRoadmapService:
                     str(exc),
                 )
 
-        if any(is_rate_limit_error(error) for error in provider_errors.values()):
+        errors = list(provider_errors.values())
+        if errors and all(is_rate_limit_error(error) for error in errors):
             raise AppError(
                 "AI generation is temporarily rate limited. Please retry shortly.",
                 status_code=429,
                 code="llm_rate_limited",
             )
-
+        if any(is_schema_error(error) or isinstance(error, ValueError) for error in errors):
+            raise AppError(
+                "AI providers returned invalid structured output for the learning roadmap.",
+                status_code=502,
+                code="llm_invalid_output",
+            )
         raise AppError(
-            "Both OpenAI and Groq failed to generate the learning roadmap.",
+            "All configured AI providers failed to generate the learning roadmap.",
             status_code=502,
-            code="all_llm_providers_failed",
+            code="llm_generation_failed",
         )
 
     def _provider_order(self) -> list[str]:
@@ -122,56 +123,15 @@ class LearningRoadmapService:
         return self.groq_llm if provider == "groq" else self.openai_llm
 
     def _invoke_provider(self, provider: str, messages, analysis_id: str) -> LearningRoadmapResult:
-        structured_llm = self._llm_for_provider(provider).with_structured_output(LearningRoadmapResult)
-        max_attempts = 2 if provider == "groq" else 1
-        schema_retry_used = False
-
-        for attempt in range(1, max_attempts + 1):
-            try:
-                logger.info("analysis_id=%s stage=roadmap provider=%s attempt=%s", analysis_id, provider, attempt)
-                result = structured_llm.invoke(messages)
-                logger.info("analysis_id=%s stage=roadmap provider=%s success=true", analysis_id, provider)
-                return result
-            except Exception as exc:
-                if is_schema_error(exc) and not schema_retry_used:
-                    schema_retry_used = True
-                    logger.warning(
-                        "analysis_id=%s stage=roadmap provider=%s schema_retry=true",
-                        analysis_id,
-                        provider,
-                    )
-                    messages = [
-                        *messages,
-                        HumanMessage(
-                            content=(
-                                "Retry and return complete JSON only. Every phase_30, phase_60, and phase_90 object "
-                                "must include phase, goal, skills, projects, practice_platforms, certifications, "
-                                "weekly_time_commitment_hours, and success_metrics. Never omit success_metrics; "
-                                "include at least 3 concise success_metrics for each phase."
-                            )
-                        ),
-                    ]
-                    continue
-
-                if provider == "groq" and is_rate_limit_error(exc):
-                    wait_seconds = retry_after_seconds(exc)
-                    logger.warning(
-                        "analysis_id=%s stage=roadmap provider=groq attempt=%s rate_limited retry_after=%.2f",
-                        analysis_id,
-                        attempt,
-                        wait_seconds,
-                    )
-                    if attempt < max_attempts:
-                        time.sleep(min(wait_seconds, 20.0))
-                        continue
-                    raise AppError(
-                        "AI generation is temporarily rate limited. Please retry shortly.",
-                        status_code=429,
-                        code="llm_rate_limited",
-                    ) from exc
-                raise
-
-        raise AppError("No AI provider is currently available.", status_code=503, code="no_llm_provider_available")
+        llm = self._llm_for_provider(provider)
+        return invoke_structured_with_json_recovery(
+            llm=llm,
+            messages=messages,
+            model_cls=LearningRoadmapResult,
+            provider=provider,
+            stage="roadmap",
+            analysis_id=analysis_id,
+        )
 
     def _build_messages(
         self,
@@ -182,7 +142,7 @@ class LearningRoadmapService:
         return [
             (
                 "system",
-                "You are a career coach. Return compact structured JSON matching the schema. "
+                "You are a career coach. Return exactly ONE compact JSON object matching the schema. Never return a top-level array, markdown, commentary, or extra fields. "
                 "Required top-level fields: target_roles, overall_goal, phase_30, phase_60, phase_90, "
                 "total_estimated_hours, motivational_summary. "
                 "Each phase must include phase, goal, skills, projects, practice_platforms, certifications, "
