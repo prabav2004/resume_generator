@@ -96,6 +96,8 @@ export function useResumeAnalysis(initialRole: string) {
   });
   const requestIdRef = useRef(0);
   const comparedRoleRef = useRef<string | null>(null);
+  const analysisRunningRef = useRef(false);
+  const roadmapRunningRef = useRef(false);
 
   useEffect(() => {
     setState((current) => current.selectedRole ? current : { ...current, selectedRole: initialRole });
@@ -152,6 +154,10 @@ export function useResumeAnalysis(initialRole: string) {
   }, [state.isAnalyzing, state.selectedRole, state.skills]);
 
   const runRoadmap = useCallback(async () => {
+    if (roadmapRunningRef.current) {
+      return;
+    }
+
     const resumeText = state.resumeText.trim();
     if (!resumeText || !state.skills) {
       setState((current) => ({
@@ -161,6 +167,7 @@ export function useResumeAnalysis(initialRole: string) {
       return;
     }
 
+    roadmapRunningRef.current = true;
     setState((current) => ({ ...current, isRoadmapLoading: true, roadmapError: null, stage: 'roadmap' }));
     try {
       const roadmap = await generateLearningRoadmap(resumeText, state.skills, state.selectedRole || undefined);
@@ -177,11 +184,13 @@ export function useResumeAnalysis(initialRole: string) {
         stage: current.atsResult || current.careerResult ? 'partial' : 'failed',
         roadmapError: error instanceof Error ? error.message : 'Roadmap generation failed.',
       }));
+    } finally {
+      roadmapRunningRef.current = false;
     }
   }, [state.resumeText, state.selectedRole, state.skills]);
 
   const startAnalysis = useCallback(async () => {
-    if (!state.file || state.isAnalyzing) {
+    if (!state.file || state.isAnalyzing || analysisRunningRef.current) {
       return;
     }
 
@@ -195,6 +204,8 @@ export function useResumeAnalysis(initialRole: string) {
       return;
     }
 
+    analysisRunningRef.current = true;
+    roadmapRunningRef.current = false;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     comparedRoleRef.current = null;
@@ -220,10 +231,6 @@ export function useResumeAnalysis(initialRole: string) {
     }));
 
     try {
-      await saveHistory(state.file.name, 'uploading', targetRole).catch((error) => {
-        if (error?.status === 401) throw error;
-      });
-
       const uploaded = await uploadResume(state.file);
       if (requestId !== requestIdRef.current) return;
 
@@ -279,28 +286,32 @@ export function useResumeAnalysis(initialRole: string) {
         isRoadmapLoading: true,
       }));
 
-      generateLearningRoadmap(resumeText, skills, targetRole)
-        .then((roadmapResult) => {
-          if (requestId !== requestIdRef.current) return;
-          setState((current) => ({
-            ...current,
-            roadmapResult,
-            roadmapError: null,
-            isRoadmapLoading: false,
-            stage: 'complete',
-          }));
-        })
-        .catch((error: unknown) => {
-          if (requestId !== requestIdRef.current) return;
-          setState((current) => ({
-            ...current,
-            isRoadmapLoading: false,
-            roadmapError: error instanceof Error ? error.message : 'Roadmap generation failed.',
-            stage: 'partial',
-          }));
-        });
+      let finalStatus = 'completed';
+      try {
+        roadmapRunningRef.current = true;
+        const roadmapResult = await generateLearningRoadmap(resumeText, skills, targetRole);
+        if (requestId !== requestIdRef.current) return;
+        setState((current) => ({
+          ...current,
+          roadmapResult,
+          roadmapError: null,
+          isRoadmapLoading: false,
+          stage: 'complete',
+        }));
+      } catch (error: unknown) {
+        if (requestId !== requestIdRef.current) return;
+        finalStatus = 'partial';
+        setState((current) => ({
+          ...current,
+          isRoadmapLoading: false,
+          roadmapError: error instanceof Error ? error.message : 'Roadmap generation failed.',
+          stage: 'partial',
+        }));
+      } finally {
+        roadmapRunningRef.current = false;
+      }
 
-      await saveHistory(uploaded.filename, 'completed', targetRole).catch((error) => {
+      await saveHistory(uploaded.filename, finalStatus, targetRole).catch((error) => {
         if (error?.status === 401) throw error;
       });
 
@@ -320,6 +331,10 @@ export function useResumeAnalysis(initialRole: string) {
         stage: 'failed',
         loadingStep: '',
       }));
+    } finally {
+      if (requestId === requestIdRef.current) {
+        analysisRunningRef.current = false;
+      }
     }
   }, [initialRole, state.file, state.isAnalyzing, state.selectedRole]);
 
